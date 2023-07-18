@@ -89,7 +89,8 @@ var (
 	printVersion       = flag.Bool("version", false, "Print version, and exit.")
 	quietMode          = flag.Bool("quiet", false, "Reduce output to the most important messages only.")
 	dryRun             = flag.Bool("dryrun", false, "Run MastoPurge to preview its results, but without actually deleting any statuses.")
-	purgeFavs          = flag.Bool("favs", false, "Purge favourites in addition to toots.")
+	purgePosts         = flag.Bool("posts", false, "Purge posts.")
+	purgeFavs          = flag.Bool("favs", false, "Purge favourites.")
 	verbose            = flag.Bool("verbose", false, "Be more verbose with log info.")
 )
 
@@ -101,6 +102,12 @@ func main() {
 	if *printVersion {
 		fmt.Printf("MastoPurge version %s\n", versionString)
 		os.Exit(0)
+	}
+
+	// Not purging anything? Print usage and quit.
+	if !*purgePosts && !*purgeFavs {
+		flag.PrintDefaults()
+		os.Exit(1)
 	}
 
 	interactiveMode := !(*noninteractiveMode)
