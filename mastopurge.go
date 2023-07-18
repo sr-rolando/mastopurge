@@ -478,7 +478,10 @@ func purgeFavourites(maxtime time.Time, dryRun bool, verbose bool, apiClient *AP
 		}
 
 		for i := 0; i < len(chunk); i++ {
-			favs = append(favs, chunk[i])
+			// Only append favs older than maxtime.
+			if chunk[i].CreatedAt.Sub(maxtime) < 0 {
+				favs = append(favs, chunk[i])
+			}
 			if chunk[i].ID < maxId {
 				log.Printf("decreasing maxId from %d  to %d.", maxId, chunk[i].ID)
 				maxId = chunk[i].ID
