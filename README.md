@@ -1,7 +1,7 @@
 # MastoPurge
-*Purges Mastodon accounts. Deletes old posts. Makes things clean again.*
+*Purges Mastodon accounts by deleting old posts and favs.*
 
-MastoPurge connects to your Mastodon account and automatically mass-deletes your old toots. You define what "old" means: Posts from the last few hours/days/weeks/months are preserved while older ones get deleted from your account.
+MastoPurge connects to your Mastodon account and automatically mass-deletes your old posts and favs.
 
 MastoPurge is executed as a command line application on your own PC. You do not need to rely on third parties.
 
@@ -9,38 +9,15 @@ MastoPurge is executed as a command line application on your own PC. You do not 
 * Deleting hundreds or thousands of posts can take a long time due to Mastodon API limits/throttling
 * There is no guarantee that your federated toots are deleted on every foreign instance
 
-## Demo Video
+## Reference
 
-See https://youtu.be/fQzc6CHq3aU
-
-## Why should you use this tool?
-
-There is a German word for the process of removing old data: "Datenhygiene". Datenhygiene can be  translated to "data hygiene", which means to remove data which is not needed or relevant anymore. This brings some advantages:
-
-* **Remove part of your personal history from the internet**: Maybe you regret having written something publicly or privately, which new users should not see anymore. We all change our opinions over time. Be sure nobody gets a wrong impression based on outdated posts.  
-* **Improve server performance**: Less posts => Less data => Better database performance => Quicker Mastodon reaction. Posts usually are not relevant anymore after a few days. Do your instance administrator a favor and clean up your space to keep costs for computing and storage as low as possible.
-
-## Why should you NOT use this tool?
-
-Mass-deletions by MastoPurge cause a lot of traffic between Mastodon instances, because deletions are federated one after another. Unfortunately Mastodon does not offer mass-deleting old posts itself, so there is no other efficient way to get rid of your old data. Mass-deletions could be implemented quite traffic-respecting, if well integrated into Mastodon - obviously there is no solution to that yet. (Also see: [#875](https://github.com/tootsuite/mastodon/issues/875), [#69](https://github.com/glitch-soc/mastodon/issues/69))
-
-## Download and run Linux x64 binary:
-
-Download latest binary from https://github.com/ThomasLeister/mastopurge/releases/latest
-
-    chmod u+x mastopurge_linux_x86_64
-    ./mastopurge_linux_x86_64
-
+This is a fork of https://github.com/ThomasLeister/mastopurge/ which has been archived due to Mastodon's [auto-delete](https://github.com/mastodon/mastodon/pull/16529) feature. However, this feature does not cover favs.
 
 ## Compile and run from source:
 
 (Golang must be set up)
 
-    (change to your Golang source dir)
-    git clone https://github.com/ThomasLeister/mastopurge.git
-    cd mastopurge
     go run mastopurge.go
-
 
 ## Usage instructions
 
@@ -86,4 +63,4 @@ If you are really curious about some internals, add verbose output:
 
 ```
 ./mastopurge --maxage "365 days" --verbose
-````
+```
