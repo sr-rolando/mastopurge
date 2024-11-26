@@ -487,6 +487,9 @@ func doPurgeFavourites(maxtime time.Time, dryRun bool, verbose bool, apiClient *
 			// Only append favs older than maxtime.
 			if chunk[i].CreatedAt.Sub(maxtime) < 0 {
 				favs = append(favs, chunk[i])
+			} else if verbose {
+				log.Printf("  ..fav for post with id=%d, posted at %s is newer than %s. Keeping it.",
+					chunk[i].ID, chunk[i].CreatedAt, maxtime)
 			}
 			if chunk[i].ID < maxId {
 				log.Printf("decreasing maxId from %d  to %d.", maxId, chunk[i].ID)
