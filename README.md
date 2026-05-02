@@ -1,5 +1,6 @@
 # MastoPurge
-*Purges Mastodon accounts. Deletes old posts. Makes things clean again.*
+
+*Purges Mastodon accounts. Deletes old posts & favs. Makes things clean again.*
 
 MastoPurge connects to your Mastodon account and automatically mass-deletes your old toots. You define what "old" means: Posts from the last few hours/days/weeks/months are preserved while older ones get deleted from your account.
 
