@@ -445,11 +445,16 @@ func main() {
 
 			// Go hunting likes.
 			if *purgeFavs {
+				if !*quietMode {
+					log.Println(">>>>>> Deleting favourites older than ", maxtime.Format("Jan 2, 2006 at 3:04:05 PM MST"))
+				}
 				numFavsDeleted, err := purgeFavourites(maxtime, *dryRun, *verbose, hc, accountinfo)
 				if err != nil {
 					log.Fatal(err)
 				}
-				log.Printf(">>>>>> Deleted %d favourites.\n", numFavsDeleted)
+				if !*quietMode {
+					log.Printf(">>>>>> Deleted %d favourites.\n", numFavsDeleted)
+				}
 			}
 		}
 	}
