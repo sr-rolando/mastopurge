@@ -89,7 +89,8 @@ var (
 	printVersion       = flag.Bool("version", false, "Print version, and exit.")
 	quietMode          = flag.Bool("quiet", false, "Reduce output to the most important messages only.")
 	dryRun             = flag.Bool("dryrun", false, "Run MastoPurge to preview its results, but without actually deleting any statuses.")
-	purgeFavs          = flag.Bool("favs", false, "Purge favourites in addition to toots.")
+	purgePosts         = flag.Bool("posts", false, "Purge posts.")
+	purgeFavs          = flag.Bool("favs", false, "Purge favourites.")
 	verbose            = flag.Bool("verbose", false, "Be more verbose with log info.")
 )
 
@@ -101,6 +102,12 @@ func main() {
 	if *printVersion {
 		fmt.Printf("MastoPurge version %s\n", versionString)
 		os.Exit(0)
+	}
+
+	// Not purging anything? Print usage and quit.
+	if !*purgePosts && !*purgeFavs {
+		flag.PrintDefaults()
+		os.Exit(1)
 	}
 
 	interactiveMode := !(*noninteractiveMode)
@@ -303,152 +310,19 @@ func main() {
 			}
 
 			maxtime = time.Now().Add(-maxage)
-			if interactiveMode {
-				fmt.Println("Okay, let's do it! ")
-				fmt.Println("Posts older than", maxtime, "will be deleted!")
-				fmt.Print("Loading gun ")
-				for i := 0; i < 40; i++ {
-					fmt.Print(".")
-					time.Sleep(time.Duration(50) * time.Millisecond)
-				}
-				time.Sleep(time.Duration(2) * time.Second)
-				fmt.Print("\n\n")
-			} else {
-				log.Println("Posts older than", maxtime.Format("Jan 2, 2006 at 3:04:05 PM MST"), "will be deleted!")
-			}
 
-			// Get IDs of pinned posts (these won't be deleted)
-			if !*quietMode {
-				log.Printf("========== Fetching pinned statuses ==========\n")
-			}
-			params := url.Values{}
-			params.Add("pinned", "true")
-			resp, fetchErr := hc.Request(http.MethodGet, "/api/v1/accounts/"+strconv.Itoa(accountinfo.ID)+"/statuses", params)
-			if fetchErr != nil {
-				log.Fatal(fetchErr)
-			}
-			var pinnedStatuses []Status
-			err = json.Unmarshal(resp, &pinnedStatuses)
-			if err != nil {
-				// Maybe server response is an error message?
-				log.Println(string(resp))
-				log.Fatal(err)
-			}
-			pinnedStatusIds := getStatusIds(pinnedStatuses)
-			log.Printf("Found %d pinned statuses, which will not be deleted.", len(pinnedStatusIds))
-
-			var maxid uint64 = 0
-			var prevmaxid uint64 = 1
-			var deletedcount uint16
-
-			// Fetch new pages until there are no more pages
-			for {
-				if !*quietMode {
-					log.Printf("========== Fetching new statuses until status %d ==========\n", maxid)
-				}
-
-				nodeletions := true
-
-				// Fetch posts
-				params := url.Values{}
-				params.Add("limit", strconv.Itoa(Pagelimit))
-				if maxid != 0 {
-					params.Add("max_id", fmt.Sprint(maxid))
-				}
-				resp, fetchErr := hc.Request(http.MethodGet, "/api/v1/accounts/"+strconv.Itoa(accountinfo.ID)+"/statuses", params)
-				if fetchErr != nil {
-					log.Fatal(fetchErr)
-				}
-
-				var statuses []Status
-				err = json.Unmarshal(resp, &statuses)
+			// Go hunting posts.
+			if *purgePosts {
+				numPostsDeleted, err := doPurgePosts(maxtime, *dryRun, *verbose, hc, accountinfo)
 				if err != nil {
-					// Maybe server response is an error message?
-					log.Println(string(resp))
 					log.Fatal(err)
 				}
-
-				// Exit killer loop if there are no more statuses or if we are in a loop (maxid == prevmaxid)
-				if (len(statuses) == 0) || (maxid == prevmaxid) {
-					break
-				}
-
-				for _, status := range statuses {
-					// Parse time
-					if status.CreatedAt.Before(maxtime) {
-						if idInSlice(status.ID, pinnedStatusIds) {
-							if !*quietMode {
-								log.Println("Status " + fmt.Sprint(status.ID) + " is pinned; not deleting.")
-							}
-							continue
-						}
-
-						// Delete post
-						nodeletions = false
-
-						if !*dryRun {
-							delResp, delErr := hc.Request(http.MethodDelete, "/api/v1/statuses/"+fmt.Sprint(status.ID), nil)
-							if delErr != nil {
-								log.Println("!!! Could not delete status " + fmt.Sprint(status.ID) + " !!!")
-							}
-
-							var delStatus Status
-							err = json.Unmarshal(delResp, &delStatus)
-							if err != nil {
-								log.Println(string(delResp))
-								log.Fatal(err)
-							}
-
-							if delStatus.ID == status.ID {
-								deletedcount++
-							} else {
-								log.Println("Status " + fmt.Sprint(status.ID) + " could not be deleted :( \nResponse: " + string(delResp))
-							}
-						}
-					}
-
-					if status.ID < maxid || maxid == 0 {
-						prevmaxid = maxid
-						maxid = status.ID - 1
-					}
-				}
-
-				if nodeletions {
-					if !*quietMode {
-						log.Println("No posts to be deleted on this page. Trying next page ...")
-					}
-				} else {
-					if deletedcount == 0 && *dryRun {
-						if !*quietMode {
-							log.Println("0 statuses deleted, because -dryRun was passed.")
-						}
-					} else {
-						if !*quietMode {
-							log.Println(deletedcount, "statuses deleted.")
-						}
-					}
-					// Wait before fetching a new page. Give server time to re-assemble pages.
-					time.Sleep(time.Duration(1) * time.Second)
-				}
-			}
-
-			if deletedcount == 0 && *dryRun {
-				log.Println("[dryRun] 0 statuses deleted in total, because -dryRun was passed.")
-			}
-
-			// No more pages, done deleting posts. :-)
-			if interactiveMode {
-				fmt.Println(">>>>>>", deletedcount, "statuses were successfully deleted.")
-			} else {
-				log.Println(deletedcount, "statuses were successfully deleted.")
+				log.Printf(">>>>>> Deleted %d posts.\n", numPostsDeleted)
 			}
 
 			// Go hunting likes.
 			if *purgeFavs {
-				if !*quietMode {
-					log.Println(">>>>>> Deleting favourites older than ", maxtime.Format("Jan 2, 2006 at 3:04:05 PM MST"))
-				}
-				numFavsDeleted, err := purgeFavourites(maxtime, *dryRun, *verbose, hc, accountinfo)
+				numFavsDeleted, err := doPurgeFavourites(maxtime, *dryRun, *verbose, hc, accountinfo)
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -460,9 +334,136 @@ func main() {
 	}
 }
 
-// deleteFavourites looks for all favs made by the user that are older than maxtime.
+// doPurgePosts looks for all posts by the user that are older than maxtime.
+// Returns the number of deleted posts and any error that might have occured.
+func doPurgePosts(maxtime time.Time, dryRun bool, verbose bool, apiClient *APIClient, accountInfo AccountInfo) (numPostsDeleted uint64, err error) {
+	log.Println("Posts older than", maxtime.Format("Jan 2, 2006 at 3:04:05 PM MST"), "will be deleted!")
+	// Get IDs of pinned posts (these won't be deleted)
+	if verbose {
+		log.Printf("========== Fetching pinned statuses ==========\n")
+	}
+	params := url.Values{}
+	params.Add("pinned", "true")
+	resp, fetchErr := apiClient.Request(http.MethodGet, "/api/v1/accounts/"+strconv.Itoa(accountInfo.ID)+"/statuses", params)
+	if fetchErr != nil {
+		log.Fatal(fetchErr)
+	}
+	var pinnedStatuses []Status
+	err = json.Unmarshal(resp, &pinnedStatuses)
+	if err != nil {
+		// Maybe server response is an error message?
+		log.Println(string(resp))
+		log.Fatal(err)
+	}
+	pinnedStatusIds := getStatusIds(pinnedStatuses)
+	log.Printf("Found %d pinned statuses, which will not be deleted.", len(pinnedStatusIds))
+
+	var maxid uint64 = 0
+	var prevmaxid uint64 = 1
+	var deletedcount uint64
+
+	// Fetch new pages until there are no more pages
+	for {
+		if verbose {
+			log.Printf("========== Fetching new statuses until status %d ==========\n", maxid)
+		}
+
+		nodeletions := true
+
+		// Fetch posts
+		params := url.Values{}
+		params.Add("limit", strconv.Itoa(Pagelimit))
+		if maxid != 0 {
+			params.Add("max_id", fmt.Sprint(maxid))
+		}
+		resp, fetchErr := apiClient.Request(http.MethodGet, "/api/v1/accounts/"+strconv.Itoa(accountInfo.ID)+"/statuses", params)
+		if fetchErr != nil {
+			log.Fatal(fetchErr)
+		}
+
+		var statuses []Status
+		err = json.Unmarshal(resp, &statuses)
+		if err != nil {
+			// Maybe server response is an error message?
+			log.Println(string(resp))
+			log.Fatal(err)
+		}
+
+		// Exit killer loop if there are no more statuses or if we are in a loop (maxid == prevmaxid)
+		if (len(statuses) == 0) || (maxid == prevmaxid) {
+			break
+		}
+
+		for _, status := range statuses {
+			// Parse time
+			if status.CreatedAt.Before(maxtime) {
+				if idInSlice(status.ID, pinnedStatusIds) {
+					if !*quietMode {
+						log.Println("Status " + fmt.Sprint(status.ID) + " is pinned; not deleting.")
+					}
+					continue
+				}
+
+				// Delete post
+				nodeletions = false
+
+				if !dryRun {
+					delResp, delErr := apiClient.Request(http.MethodDelete, "/api/v1/statuses/"+fmt.Sprint(status.ID), nil)
+					if delErr != nil {
+						log.Println("!!! Could not delete status " + fmt.Sprint(status.ID) + " !!!")
+					}
+
+					var delStatus Status
+					err = json.Unmarshal(delResp, &delStatus)
+					if err != nil {
+						log.Println(string(delResp))
+						log.Fatal(err)
+					}
+
+					if delStatus.ID == status.ID {
+						deletedcount++
+					} else {
+						log.Println("Status " + fmt.Sprint(status.ID) + " could not be deleted :( \nResponse: " + string(delResp))
+					}
+				}
+			}
+
+			if status.ID < maxid || maxid == 0 {
+				prevmaxid = maxid
+				maxid = status.ID - 1
+			}
+		}
+
+		if nodeletions {
+			if !*quietMode {
+				log.Println("No posts to be deleted on this page. Trying next page ...")
+			}
+		} else {
+			if deletedcount == 0 && dryRun {
+				if !*quietMode {
+					log.Println("0 statuses deleted, because -dryRun was passed.")
+				}
+			} else {
+				if !*quietMode {
+					log.Println(deletedcount, "statuses deleted.")
+				}
+			}
+			// Wait before fetching a new page. Give server time to re-assemble pages.
+			time.Sleep(time.Duration(1) * time.Second)
+		}
+	}
+
+	if deletedcount == 0 && dryRun {
+		log.Println("[dryRun] 0 statuses deleted in total, because -dryRun was passed.")
+	}
+
+	// No more pages, done deleting posts.
+	return deletedcount, nil
+}
+
+// doPurgeFavourites looks for all favs made by the user that are older than maxtime.
 // Returns the number of deleted favourites and any error that might have occured.
-func purgeFavourites(maxtime time.Time, dryRun bool, verbose bool, apiClient *APIClient, accountInfo AccountInfo) (numFavsDeleted int, err error) {
+func doPurgeFavourites(maxtime time.Time, dryRun bool, verbose bool, apiClient *APIClient, accountInfo AccountInfo) (numFavsDeleted int, err error) {
 	var favs []Status
 	var chunk []Status
 	var keepGoing bool
@@ -483,7 +484,13 @@ func purgeFavourites(maxtime time.Time, dryRun bool, verbose bool, apiClient *AP
 		}
 
 		for i := 0; i < len(chunk); i++ {
-			favs = append(favs, chunk[i])
+			// Only append favs older than maxtime.
+			if chunk[i].CreatedAt.Sub(maxtime) < 0 {
+				favs = append(favs, chunk[i])
+			} else if verbose {
+				log.Printf("  ..fav for post with id=%d, posted at %s is newer than %s. Keeping it.",
+					chunk[i].ID, chunk[i].CreatedAt, maxtime)
+			}
 			if chunk[i].ID < maxId {
 				log.Printf("decreasing maxId from %d  to %d.", maxId, chunk[i].ID)
 				maxId = chunk[i].ID
